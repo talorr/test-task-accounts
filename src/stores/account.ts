@@ -3,12 +3,13 @@ import { useLocalStorage } from '@vueuse/core'
 
 interface Account {
   id?: number
-  mark?: string | { text: string }[]
+  mark?: string | { text: string }[] | string[]
   markInput?: string
   type: 'LDAP' | 'Локальная'
   login: string
   password: string | null
-  errorFields?: string[]
+  errorFields?: number[]
+  invalid?: boolean
 }
 
 export const useAccountStore = defineStore('account', {

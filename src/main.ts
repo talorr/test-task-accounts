@@ -8,8 +8,12 @@ import router from './router'
 import PrimeVue from 'primevue/config'
 import Aura from '@primeuix/themes/aura'
 import 'primeicons/primeicons.css'
+import ToastService from 'primevue/toastservice'
+import FocusTrap from 'primevue/focustrap'
+
 const app = createApp(App)
 
+app.directive('focustrap', FocusTrap)
 app.use(createPinia())
 app.use(router)
 app.use(PrimeVue, {
@@ -18,4 +22,5 @@ app.use(PrimeVue, {
   },
 })
 
+app.use(ToastService)
 app.mount('#app')

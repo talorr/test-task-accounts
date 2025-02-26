@@ -25,40 +25,50 @@
             }"
           >
             <InputText
-              @focusout="validateAccount(account)"
+              @blur="validateAccount()"
               v-model="account.markInput"
               placeholder="Введите метки"
+              :invalid="
+                !!account?.markInput &&
+                (account?.markInput?.length === 0 || account?.markInput?.length > 50)
+              "
             />
             <Select
               @change="validatePassword(account)"
-              @focusout="validateAccount(account)"
+              @focusout="validateAccount()"
               :options="accountTypes"
               v-model="account.type"
               placeholder="Выберите тип"
             />
             <InputText
-              @focusout="validateAccount(account)"
+              @blur="validateAccount()"
               v-model="account.login"
               placeholder="Введите логин"
+              :invalid="
+                (account.login?.length === 0 && account?.invalid) || account.login?.length > 100
+              "
             />
+
             <Password
               autocomplete="current-password"
-              :invalid="account.password?.length === 0 && account.type === 'Локальная'"
+              :invalid="
+                (account.password?.length === 0 &&
+                  account.type === 'Локальная' &&
+                  account?.invalid) ||
+                (!!account.password && account.password?.length > 100)
+              "
               placeholder="Введите пароль"
               toggleMask
               :disabled="account.type !== 'Локальная'"
-              @focusout="validateAccount(account)"
+              @blur="validateAccount()"
               v-model="account.password"
             />
-            <Button icon="pi pi-trash" @click.stop="removeAccount(account)" />
-
-            <div v-if="account.errorFields?.length" class="accounts__table-row-error">
-              <span v-for="(error, index) in account.errorFields" :key="index">{{ error }}</span>
-            </div>
+            <Button icon="pi pi-trash" @click="removeAccount(account)" />
           </form>
         </template>
       </div>
     </div>
+    <Toast />
   </div>
 </template>
 
@@ -67,18 +77,23 @@ import { Button } from 'primevue'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import Select from 'primevue/select'
-import { ref } from 'vue'
+import Toast from 'primevue/toast'
+import { useToast } from 'primevue/usetoast'
+import { ref, nextTick } from 'vue'
+// Импортируем тип с ключевым словом 'type'
 import { useAccountStore } from '@/stores/account'
+
+const toast = useToast()
 
 interface Account {
   id?: number
-  mark?: string | { text: string }[]
+  mark?: string | { text: string }[] | string[]
   markInput?: string
   type: 'LDAP' | 'Локальная'
   login: string
   password: string | null
-  errorFields?: string[]
-  validated?: boolean
+  errorFields?: number[]
+  invalid?: boolean
 }
 
 const accountStore = useAccountStore()
@@ -88,65 +103,96 @@ const validatePassword = (account: Account) => {
   if (account.type === 'LDAP') account.password = null
 }
 
-const isMarkOverflow = (mark: string | undefined) => mark && mark.length > 50
-const isLoginValid = (login: string) => login.length === 0
-const isLoginOverflow = (login: string) => login.length > 100
-const isPasswordValid = (password: string | null) => password && password.length === 0
-const isPasswordOverflow = (password: string | null) => password && password.length > 100
+const fieldNotEmpty = (fieldValue: string | null) => {
+  return fieldValue?.length === 0
+}
 
-const parseMarks = (markInput: string | undefined) =>
-  markInput
-    ?.split(';')
-    .map((mark) => ({ text: mark.trim() }))
-    .filter((mark) => mark.text) ?? []
+const isMarkOverflow = (mark: string | undefined) => mark && mark?.length > 50
+const isLoginOverflow = (login: string) => login?.length > 100
+const isPasswordOverflow = (password: string | null) => password && password?.length > 100
 
-const validateAccount = (account: Account) => {
-  const errors: string[] = []
-  account.errorFields = []
+const parseMarks = (markInput: string | undefined) => markInput?.split(';') ?? []
 
-  if (isMarkOverflow(account.markInput)) {
-    errors.push('Метка не может превышать 50 символов')
-  }
+const triggerToast = (
+  message: string,
+  severity: 'success' | 'info' | 'warn' | 'error' | 'secondary' | 'contrast' | undefined = 'error',
+) => {
+  toast.add({
+    severity: severity,
+    summary: 'Предупреждение',
+    detail: message,
+    life: 3000,
+  })
+}
 
-  if (isLoginValid(account.login)) {
-    errors.push('Логин обязателен для заполнения')
-  }
-  if (isLoginOverflow(account.login)) {
-    errors.push('Логин не может превышать 100 символов')
-  }
+const validateAccount = () => {
+  let errors: number = 0
 
-  if (account.type === 'Локальная') {
-    if (isPasswordValid(account.password)) {
-      errors.push('Пароль обязателен для заполнения')
+  accounts.value.forEach((account: Account) => {
+    account.errorFields = []
+    let errorsAccount: number = 0
+    if (isMarkOverflow(account.markInput)) {
+      errorsAccount++
+      triggerToast('Метка не может превышать 50 символов')
     }
-    if (isPasswordOverflow(account.password)) {
-      errors.push('Пароль не может превышать 100 символов')
+    if (fieldNotEmpty(account.login)) {
+      errorsAccount++
+      triggerToast('Логин обязателен для заполнения')
     }
-  }
+    if (isLoginOverflow(account.login)) {
+      errorsAccount++
+      triggerToast('Логин не может превышать 100 символов')
+    }
 
-  if (errors.length > 0) {
-    account.validated = false
-    account.errorFields = errors
-  } else {
-    account.validated = true
-    account.mark = parseMarks(account.markInput) // ✅ Преобразуем метки в массив
-    save()
-  }
+    if (account.type === 'Локальная') {
+      if (fieldNotEmpty(account.password)) {
+        errorsAccount++
+        triggerToast('Пароль обязателен для заполнения')
+      }
+      if (isPasswordOverflow(account.password)) {
+        errorsAccount++
+        triggerToast('Пароль не может превышать 100 символов')
+      }
+    }
+    console.log(errors)
+    if (errorsAccount > 0) {
+      account.invalid = true
+      account.errorFields = [errorsAccount]
+      errors += errorsAccount
+    } else {
+      account.invalid = false
+      account.mark = parseMarks(account.markInput)
+    }
+  })
+
+  if (errors === 0) save()
 }
 
 const save = async () => {
-  accountStore.accounts = accounts.value.map((account) => ({
-    ...account,
-    mark: parseMarks(account.markInput), // ✅ Сохраняем преобразованные метки
-  }))
+  let i = 0
+  accountStore.accounts = accounts.value
+    .filter((account) => !account.invalid)
+    .map((account) => {
+      account.id = i
+      i++
+      return {
+        ...account,
+        mark: parseMarks(account.markInput),
+      }
+    })
 }
 
 const accounts = ref<Account[]>(JSON.parse(JSON.stringify(accountStore.accounts)))
 
 const addNewAccount = () => {
-  const lastAccount = accounts.value?.[accounts.value.length - 1]
-  newAccount.id = lastAccount?.id ? lastAccount.id + 1 : 0
+  const hasUnsavedAccount = accounts.value.some((account) => account.invalid || account.id === -1)
+  if (hasUnsavedAccount) {
+    triggerToast('Завершите редактирование текущей записи', 'warn')
+    return
+  }
+
   accounts.value.push({ ...newAccount })
+  nextTick(() => {})
 }
 
 const removeAccount = (account: Account) => {
@@ -160,6 +206,7 @@ const newAccount: Account = {
   login: '',
   password: '',
   errorFields: [],
+  id: -1,
 }
 </script>
 
