@@ -1,0 +1,14 @@
+[
+  {
+    "label": "Account 1",
+    "type": "LDAP",
+    "login": "user1",
+    "password": "password1"
+  },
+  {
+    "label": "Account 2",
+    "type": "LOCAL",
+    "login": "user2",
+    "password": "password2"
+  }
+]
